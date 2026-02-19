@@ -1,0 +1,109 @@
+# Belarrius AI Horde Bridge v1.0
+# Start command: node index.js
+
+# AI Horde API key (required)
+AiHordeApiKey: ""
+
+# Worker identity shown on Horde
+workerName: "Worker"
+
+# Horde cluster URL
+clusterUrl: "https://stablehorde.net"
+
+# Optional: usernames to prioritize
+# Format:
+# priorityUsernames:
+#   - "Belarrius#229816"
+# Keep [] to disable.
+priorityUsernames: []
+
+# Optional: update worker description on startup via AI Horde API.
+# This requires your worker id.
+# If either value is empty, no PUT is sent.
+workerId: ""
+workerInfo: ""
+
+# Local inference engine (required)
+# Possible values: llamacpp, koboldcpp, vllm, sglang, tabbyapi
+serverEngine: "llamacpp"
+
+# Local server URL
+serverUrl: "http://localhost:8000"
+
+# Optional: Authorization header sent to local server ("" = disabled)
+serverApiKey: ""
+
+# Optional: model override sent to local server ("" = disabled)
+serverModel: ""
+
+# Model name advertised to AI Horde (required)
+model: "llamacpp/your-model-name"
+
+# Context & generation settings
+# Context size (required)
+ctx: 4096
+maxLength: 512
+# Possible values: enabled, disabled
+# If enabled, the bridge rejects jobs when estimated prompt tokens exceed:
+# ctx - requested max_length
+enforceCtxLimit: "disabled"
+
+# Number of parallel jobs processed by this bridge.
+# 1 = safest/stable default.
+# Increase only if your backend can run multiple generations in parallel.
+threads: 1
+
+# AI Horde Network settings
+# timeout (seconds): max wait for Horde pop/submit and local generation HTTP calls.
+# Use higher values for long prompts or slower hardware.
+timeout: 120
+
+# refreshTime (milliseconds): poll interval for new Horde jobs.
+# Lower = faster pickup but more API traffic.
+# Higher = less traffic but more idle latency between jobs.
+refreshTime: 5000
+
+# Safety
+# Possible values: enabled, disabled
+nsfw: "disabled"
+
+# CSAM filter mode:
+# - disabled: no bridge-side CSAM filtering
+# - regex: local keyword/regex checks
+# - openai: OpenAI omni-moderation-latest (requires openaiApiKey)
+#   If OpenAI moderation is unavailable, jobs are faulted (fail-closed).
+#   Decision is based on OpenAI category boolean "sexual/minors" only.
+enableCsamFilter: "regex"
+
+# Action when a positive CSAM detection occurs (regex/openai):
+# - respond: submit a safe explanatory text instead of faulting the job (recommended)
+# - fault: keep old behavior (can increase worker drops/maintenance risk)
+csamPositiveAction: "respond"
+
+# Text sent to requester when csamPositiveAction is "respond"
+csamBlockedResponse: "Your request has been filtered by this worker safety policy."
+
+# Optional metadata ref for Horde gen_metadata when CSAM is responded.
+# Leave empty for auto value.
+csamMetadataRef: ""
+
+# OpenAI moderation input token cap per prompt.
+# If estimated prompt tokens exceed this value, the prompt is truncated (head only)
+# before calling OpenAI moderation.
+# Range: 1..30000
+# Note: values above 30000 are not useful for omni-moderation-latest.
+openaiModerationMaxTokens: 10000
+
+# Required only when enableCsamFilter is "openai"
+openaiApiKey: ""
+
+# Throughput limit (tokens/sec), "" to disable
+maxTps: ""
+
+# UI theme
+# Possible values: acide, cyberpunk, matrix, monochrome
+uiTheme: "acide"
+
+# Logs disabled by default (empty string = disabled)
+outputPrompt: ""
+logFile: ""

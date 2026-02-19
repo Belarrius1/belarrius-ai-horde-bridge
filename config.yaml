@@ -24,19 +24,22 @@ workerId: ""
 workerInfo: ""
 
 # Local inference engine (required)
-# Possible values: llamacpp, koboldcpp, vllm, sglang, tabbyapi
+# Possible values: ollama, llamacpp, koboldcpp, vllm, sglang, tabbyapi
 serverEngine: "llamacpp"
 
 # Local server URL
+# For ollama default is usually: http://localhost:11434
 serverUrl: "http://localhost:8000"
 
 # Optional: Authorization header sent to local server ("" = disabled)
 serverApiKey: ""
 
 # Optional: model override sent to local server ("" = disabled)
+# Required when serverEngine is "ollama" (example: llama3.1:8b)
 serverModel: ""
 
 # Model name advertised to AI Horde (required)
+# For ollama you can use: ollama/your-model-name
 model: "llamacpp/your-model-name"
 
 # Context & generation settings

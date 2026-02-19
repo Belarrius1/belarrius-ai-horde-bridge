@@ -128,6 +128,9 @@ export function parseConfig() {
   if (!options.model) throw new Error('"model" is required in config.yaml');
   if (!options.ctx) throw new Error('"ctx" is required in config.yaml');
   if (!options.serverEngine) throw new Error('"serverEngine" is required in config.yaml');
+  if (String(options.serverEngine).trim().toLowerCase() === 'ollama' && !options.serverModel) {
+    throw new Error('"serverModel" is required in config.yaml when serverEngine is set to "ollama".');
+  }
   if (!options.AiHordeApiKey || options.AiHordeApiKey === '0000000000') {
     throw new Error('"AiHordeApiKey" is required in config.yaml and cannot be the default placeholder value.');
   }

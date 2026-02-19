@@ -2,6 +2,39 @@ import { safePost } from './http.js';
 
 export function buildEngines(logger) {
   return {
+    ollama: {
+      healthUrl: '/api/tags',
+      generateUrl: '/api/generate',
+      generatePayload: (payload) => {
+        const options = {
+          num_predict: payload.max_length,
+          num_ctx: payload.max_context_length,
+          temperature: payload.temperature ?? 1.0,
+          top_p: payload.top_p ?? 1.0,
+          repeat_penalty: payload.rep_pen ?? 1.0,
+          repeat_last_n: payload.rep_pen_range ?? 64,
+          stop: payload.stop_sequence ?? []
+        };
+
+        const topK = Number(payload.top_k);
+        if (Number.isFinite(topK) && topK > 0) {
+          options.top_k = topK;
+        }
+
+        return {
+          prompt: payload.prompt,
+          stream: false,
+          options
+        };
+      },
+      extractGeneration: (data) => {
+        if (typeof data?.response !== 'string') {
+          throw new Error('Invalid Ollama response: missing response field');
+        }
+        return data.response;
+      }
+    },
+
     vllm: {
       healthUrl: '/health',
       generateUrl: '/generate',

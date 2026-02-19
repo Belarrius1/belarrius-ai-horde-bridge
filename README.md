@@ -22,6 +22,7 @@ This project is inspired by Medusa-Bridge and uses a modular architecture.
 
 ## Supported Engines
 
+- `ollama`
 - `llamacpp`
 - `koboldcpp`
 - `vllm`
@@ -36,7 +37,7 @@ Prerequisites:
 - OS: Linux/Windows/macOS
 - Node.js: 22.x recommended
 - npm: included with Node.js
-- A compatible local inference server (`llamacpp`, `koboldcpp`, `vllm`, `sglang`, `tabbyapi`)
+- A compatible local inference server (`ollama`, `llamacpp`, `koboldcpp`, `vllm`, `sglang`, `tabbyapi`)
 - A valid AI Horde key (`AiHordeApiKey`)
 - Optional for OpenAI CSAM mode: an OpenAI key (`openaiApiKey`)
 
@@ -87,11 +88,17 @@ Performance/network block:
 - `refreshTime` (milliseconds): polling frequency for new Horde jobs
 
 Possible values for `serverEngine`:
+- `ollama`
 - `llamacpp`
 - `koboldcpp`
 - `vllm`
 - `sglang`
 - `tabbyapi`
+
+For `serverEngine: "ollama"`:
+- Use `serverUrl: "http://localhost:11434"` (default Ollama URL)
+- Set `serverModel` (required), example: `llama3.1:8b`
+- Keep `model` as your Horde-advertised name, example: `ollama/llama3.1:8b`
 
 `priorityUsernames` must be a YAML list. Example:
 

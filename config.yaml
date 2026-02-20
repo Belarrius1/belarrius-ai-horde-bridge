@@ -1,4 +1,4 @@
-# Belarrius AI Horde Bridge v1.0
+# Belarrius AI Horde Bridge v1.1
 # Start command: node index.js
 
 # AI Horde API key (required)
@@ -24,22 +24,29 @@ workerId: ""
 workerInfo: ""
 
 # Local inference engine (required)
-# Possible values: ollama, llamacpp, koboldcpp, vllm, sglang, tabbyapi
+# Possible values: ollama, oobabooga, llamacpp, koboldcpp, vllm, sglang, tabbyapi
+# Aliases accepted for backward compatibility: textgenwebui, oogabooga
 serverEngine: "llamacpp"
 
 # Local server URL
 # For ollama default is usually: http://localhost:11434
+# For oobabooga OpenAI endpoint: usually http://localhost:5000
 serverUrl: "http://localhost:8000"
 
 # Optional: Authorization header sent to local server ("" = disabled)
+# For oobabooga, you can set either:
+# - raw key (bridge will send "Bearer <key>")
+# - full header value (example: "Bearer <key>")
 serverApiKey: ""
 
 # Optional: model override sent to local server ("" = disabled)
 # Required when serverEngine is "ollama" (example: llama3.1:8b)
+# Required when serverEngine is "oobabooga"
 serverModel: ""
 
 # Model name advertised to AI Horde (required)
 # For ollama you can use: ollama/your-model-name
+# For oobabooga you can use: oobabooga/your-model-name
 model: "llamacpp/your-model-name"
 
 # Context & generation settings
@@ -55,6 +62,13 @@ enforceCtxLimit: "disabled"
 # 1 = safest/stable default.
 # Increase only if your backend can run multiple generations in parallel.
 threads: 1
+
+# Polling stagger between threads.
+# Possible values: enabled, disabled
+# Useful with 4+ threads to smooth Horde API traffic and avoid burst polling.
+# Example with threads=4 and refreshTime=5000:
+# each thread polls with a ~1250ms phase offset.
+threadPollStagger: "enabled"
 
 # AI Horde Network settings
 # timeout (seconds): max wait for Horde pop/submit and local generation HTTP calls.

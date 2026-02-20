@@ -1,7 +1,40 @@
 import { safePost } from './http.js';
 
 export function buildEngines(logger) {
+  const oobabooga = {
+    healthUrl: '/v1/models',
+    generateUrl: '/v1/completions',
+    generatePayload: (payload) => {
+      const request = {
+        prompt: payload.prompt,
+        max_tokens: payload.max_length,
+        temperature: payload.temperature ?? 1.0,
+        top_p: payload.top_p ?? 1.0,
+        repetition_penalty: payload.rep_pen ?? 1.0,
+        stop: payload.stop_sequence ?? []
+      };
+
+      const topK = Number(payload.top_k);
+      if (Number.isFinite(topK) && topK > 0) {
+        request.top_k = topK;
+      }
+
+      return request;
+    },
+    extractGeneration: (data) => {
+      const generation = data?.choices?.[0]?.text;
+      if (typeof generation !== 'string') {
+        throw new Error('Invalid oobabooga response: missing choices[0].text');
+      }
+      return generation;
+    }
+  };
+
   return {
+    oobabooga,
+    textgenwebui: oobabooga,
+    oogabooga: oobabooga,
+
     ollama: {
       healthUrl: '/api/tags',
       generateUrl: '/api/generate',

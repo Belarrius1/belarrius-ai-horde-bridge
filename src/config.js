@@ -88,6 +88,7 @@ export function parseConfig() {
     enforceCtxLimit: 'disabled',
     maxTps: '',
     refreshTime: 5000,
+    threadPollStagger: 'enabled',
     nsfw: 'disabled',
     enableCsamFilter: 'regex',
     csamPositiveAction: 'respond',
@@ -107,6 +108,7 @@ export function parseConfig() {
   options.csamPositiveAction = parseCsamPositiveAction(options.csamPositiveAction);
   options.nsfw = parseBoolean(options.nsfw, 'nsfw');
   options.enforceCtxLimit = parseBoolean(options.enforceCtxLimit, 'enforceCtxLimit');
+  options.threadPollStagger = parseBoolean(options.threadPollStagger, 'threadPollStagger');
   options.serverApiKey = normalizeOptionalString(options.serverApiKey);
   options.serverModel = normalizeOptionalString(options.serverModel);
   options.openaiApiKey = normalizeOptionalString(options.openaiApiKey);
@@ -128,8 +130,9 @@ export function parseConfig() {
   if (!options.model) throw new Error('"model" is required in config.yaml');
   if (!options.ctx) throw new Error('"ctx" is required in config.yaml');
   if (!options.serverEngine) throw new Error('"serverEngine" is required in config.yaml');
-  if (String(options.serverEngine).trim().toLowerCase() === 'ollama' && !options.serverModel) {
-    throw new Error('"serverModel" is required in config.yaml when serverEngine is set to "ollama".');
+  const serverEngine = String(options.serverEngine).trim().toLowerCase();
+  if (['ollama', 'oobabooga', 'textgenwebui', 'oogabooga'].includes(serverEngine) && !options.serverModel) {
+    throw new Error('"serverModel" is required in config.yaml when serverEngine is ollama/oobabooga.');
   }
   if (!options.AiHordeApiKey || options.AiHordeApiKey === '0000000000') {
     throw new Error('"AiHordeApiKey" is required in config.yaml and cannot be the default placeholder value.');

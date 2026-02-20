@@ -6,6 +6,20 @@ import { safeGet, safePut } from './http.js';
 import { createLogger } from './logger.js';
 import { BridgeWorker } from './worker.js';
 
+function buildServerHeaders(serverEngine, serverApiKey) {
+  const key = String(serverApiKey ?? '').trim();
+  if (!key) return {};
+
+  const engine = String(serverEngine ?? '').trim().toLowerCase();
+  if (['oobabooga', 'textgenwebui', 'oogabooga'].includes(engine)) {
+    return {
+      Authorization: /^Bearer\s+/i.test(key) ? key : `Bearer ${key}`
+    };
+  }
+
+  return { Authorization: key };
+}
+
 async function main() {
   let options;
   try {
@@ -44,9 +58,7 @@ async function main() {
     'X-Api-Key': options.AiHordeApiKey,
     apikey: options.AiHordeApiKey
   };
-  const serverHeaders = options.serverApiKey
-    ? { Authorization: options.serverApiKey }
-    : {};
+  const serverHeaders = buildServerHeaders(options.serverEngine, options.serverApiKey);
 
   const dashboard = new BridgeDashboard({
     logger,
@@ -58,7 +70,8 @@ async function main() {
   const runtime = {
     running: true,
     failedRequestsInARow: 0,
-    maxFailedRequests: MAX_FAILED_REQUESTS
+    maxFailedRequests: MAX_FAILED_REQUESTS,
+    pollEpochMs: Date.now()
   };
   let sigintCount = 0;
 

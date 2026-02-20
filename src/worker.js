@@ -334,6 +334,31 @@ export class BridgeWorker {
     return false;
   }
 
+  async waitForPollSlot() {
+    if (this.threadId < 0) return;
+    if (this.options.threadPollStagger !== true) return;
+
+    const refreshTimeMs = Number(this.options.refreshTime);
+    const threadsCount = Number(this.options.threadsInt);
+    if (!Number.isFinite(refreshTimeMs) || refreshTimeMs <= 0) return;
+    if (!Number.isFinite(threadsCount) || threadsCount <= 1) return;
+
+    const slotMs = refreshTimeMs / threadsCount;
+    const threadPhaseMs = (this.threadId % threadsCount) * slotMs;
+    const epochMs = Number.isFinite(this.runtime.pollEpochMs)
+      ? this.runtime.pollEpochMs
+      : Date.now();
+
+    const nowMs = Date.now();
+    const elapsedInCycleMs = Math.max(0, nowMs - epochMs) % refreshTimeMs;
+    let waitMs = threadPhaseMs - elapsedInCycleMs;
+    if (waitMs < 0) waitMs += refreshTimeMs;
+
+    if (waitMs >= 10) {
+      await sleep(Math.round(waitMs));
+    }
+  }
+
   async validateServer() {
     const healthUrl = `${this.options.serverUrl}${this.engine.healthUrl}`;
     if (
@@ -371,6 +396,7 @@ export class BridgeWorker {
     let currentPayload = null;
     const interval = this.options.refreshTime;
 
+    await this.waitForPollSlot();
     this.dashboard.setThreadState(this.threadId, 'polling');
 
     const serverOk = await this.validateServer();

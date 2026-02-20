@@ -1,4 +1,4 @@
-# Belarrius AI Horde Bridge v1.0
+# Belarrius AI Horde Bridge v1.1
 
 Node.js bridge to connect one or more local LLM servers to **KoboldAI Horde** as a text worker, with a focus on robustness (retries, live dashboard, optional CSAM filtering, TPS limiting).
 
@@ -23,6 +23,7 @@ This project is inspired by Medusa-Bridge and uses a modular architecture.
 ## Supported Engines
 
 - `ollama`
+- `oobabooga`
 - `llamacpp`
 - `koboldcpp`
 - `vllm`
@@ -37,7 +38,7 @@ Prerequisites:
 - OS: Linux/Windows/macOS
 - Node.js: 22.x recommended
 - npm: included with Node.js
-- A compatible local inference server (`ollama`, `llamacpp`, `koboldcpp`, `vllm`, `sglang`, `tabbyapi`)
+- A compatible local inference server (`ollama`, `oobabooga`, `llamacpp`, `koboldcpp`, `vllm`, `sglang`, `tabbyapi`)
 - A valid AI Horde key (`AiHordeApiKey`)
 - Optional for OpenAI CSAM mode: an OpenAI key (`openaiApiKey`)
 
@@ -89,16 +90,28 @@ Performance/network block:
 
 Possible values for `serverEngine`:
 - `ollama`
+- `oobabooga`
 - `llamacpp`
 - `koboldcpp`
 - `vllm`
 - `sglang`
 - `tabbyapi`
 
+Aliases accepted for backward compatibility:
+- `textgenwebui`
+- `oogabooga`
+
 For `serverEngine: "ollama"`:
 - Use `serverUrl: "http://localhost:11434"` (default Ollama URL)
 - Set `serverModel` (required), example: `llama3.1:8b`
 - Keep `model` as your Horde-advertised name, example: `ollama/llama3.1:8b`
+
+For `serverEngine: "oobabooga"`:
+- Use Text Generation WebUI OpenAI API endpoint (`/v1/*`) and not llama.cpp native endpoints
+- Use `serverUrl: "http://localhost:5000"` (or your custom API port, e.g. `http://0.0.0.0:6565`)
+- Set `serverModel` (required), example: `Llama-3.1-8B-Instruct`
+- If WebUI API key is enabled, set `serverApiKey` to either raw key or `Bearer <key>`
+- Keep `model` as your Horde-advertised name, example: `oobabooga/Llama-3.1-8B-Instruct`
 
 `priorityUsernames` must be a YAML list. Example:
 

@@ -1,7 +1,7 @@
 {
   "name": "belarrius-ai-horde-bridge",
-  "version": "1.2.0",
-  "description": "Belarrius AI Horde Bridge v1.2",
+  "version": "1.3.0",
+  "description": "Belarrius AI Horde Bridge v1.3",
   "main": "index.js",
   "type": "module",
   "scripts": {

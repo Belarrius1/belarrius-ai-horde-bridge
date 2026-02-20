@@ -1,4 +1,4 @@
-# Belarrius AI Horde Bridge v1.2
+# Belarrius AI Horde Bridge v1.3
 
 Node.js bridge to connect one or more local LLM servers to **KoboldAI Horde** as a text worker, with a focus on robustness (retries, live dashboard, optional CSAM filtering, TPS limiting).
 
@@ -87,6 +87,28 @@ Performance/network block:
 - `threads`: number of parallel jobs processed by the bridge
 - `timeout` (seconds): max wait for Horde pop/submit and local generation
 - `refreshTime` (milliseconds): polling frequency for new Horde jobs
+
+UI block:
+- `UI.layout`: `horizontal` or `vertical`
+- `UI.showBridgeStats`: `enabled` or `disabled`
+- `UI.showThreadActivity`: `enabled` or `disabled`
+- `UI.showAiHordeUser`: `enabled` or `disabled`
+- `UI.showAiHordePerformance`: `enabled` or `disabled`
+- `UI.showRecentJobs`: `enabled` or `disabled`
+- `UI.recentJobsCount`: integer `1..50`
+
+Example:
+
+```yaml
+UI:
+  layout: "horizontal"
+  showBridgeStats: "enabled"
+  showThreadActivity: "enabled"
+  showAiHordeUser: "disabled"
+  showAiHordePerformance: "disabled"
+  showRecentJobs: "enabled"
+  recentJobsCount: 5
+```
 
 Possible values for `serverEngine`:
 - `ollama`

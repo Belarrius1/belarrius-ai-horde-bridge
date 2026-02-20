@@ -53,6 +53,8 @@ const UI_THEMES = {
   }
 };
 
+const RESIZE_SETTLE_MS = 500;
+
 function applyUiTheme(themeName) {
   const selected = UI_THEMES[themeName] || UI_THEMES.acide;
   Object.assign(UI, selected);
@@ -282,6 +284,21 @@ function mergeColumns(leftLines, rightLines, leftWidth, rightWidth, gap = 2) {
   return out;
 }
 
+function isEnabledFlag(value, defaultValue = true) {
+  if (typeof value === 'boolean') return value;
+  if (value === null || value === undefined) return defaultValue;
+  const normalized = String(value).trim().toLowerCase();
+  if (['enabled', 'true', '1', 'yes'].includes(normalized)) return true;
+  if (['disabled', 'false', '0', 'no'].includes(normalized)) return false;
+  return defaultValue;
+}
+
+function normalizeRecentJobsCount(value, fallback = RECENT_JOBS_LIMIT) {
+  const numeric = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(numeric) || numeric < 1) return fallback;
+  return Math.min(50, numeric);
+}
+
 export class BridgeDashboard {
   constructor({ logger, options, clusterUrl, hordeHeaders }) {
     this.logger = logger;
@@ -290,11 +307,44 @@ export class BridgeDashboard {
     this.hordeHeaders = hordeHeaders;
 
     applyUiTheme(this.options.uiTheme);
+    this.uiLayout = String(this.options.uiLayout ?? 'horizontal').trim().toLowerCase();
+    this.uiShowBridgeStats = isEnabledFlag(this.options.uiShowBridgeStats, true);
+    this.uiShowThreadActivity = isEnabledFlag(this.options.uiShowThreadActivity, true);
+    this.uiShowAiHordeUser = isEnabledFlag(this.options.uiShowAiHordeUser, true);
+    this.uiShowAiHordePerformance = isEnabledFlag(this.options.uiShowAiHordePerformance, true);
+    this.uiShowRecentJobs = isEnabledFlag(this.options.uiShowRecentJobs, true);
+    this.uiRecentJobsCount = normalizeRecentJobsCount(this.options.uiRecentJobsCount, RECENT_JOBS_LIMIT);
 
     this.enabled = process.stdout.isTTY;
     this.renderTimer = null;
     this.fetchTimer = null;
     this.fetchInFlight = false;
+    this.resizeTimer = null;
+    this.resizeInProgress = false;
+    this.lastRenderedLineCount = 0;
+    this.lastFrameLines = [];
+    this.forceFullRedraw = true;
+    this.handleResize = () => {
+      if (!this.resizeInProgress && this.renderTimer) {
+        clearInterval(this.renderTimer);
+        this.renderTimer = null;
+      }
+      this.resizeInProgress = true;
+      if (this.resizeTimer) {
+        clearTimeout(this.resizeTimer);
+      }
+      this.resizeTimer = setTimeout(() => {
+        this.resizeInProgress = false;
+        this.resizeTimer = null;
+        this.lastFrameLines = [];
+        this.lastRenderedLineCount = 0;
+        this.forceFullRedraw = true;
+        this.render();
+        if (!this.renderTimer) {
+          this.renderTimer = setInterval(() => this.render(), 1000);
+        }
+      }, RESIZE_SETTLE_MS);
+    };
 
     this.stats = {
       startedAt: Date.now(),
@@ -416,8 +466,8 @@ export class BridgeDashboard {
       timestamp: nowMs
     });
 
-    if (this.stats.recentJobs.length > RECENT_JOBS_LIMIT) {
-      this.stats.recentJobs.length = RECENT_JOBS_LIMIT;
+    if (this.stats.recentJobs.length > this.uiRecentJobsCount) {
+      this.stats.recentJobs.length = this.uiRecentJobsCount;
     }
 
     this.stats.activeJobs.delete(jobId);
@@ -425,10 +475,11 @@ export class BridgeDashboard {
 
   render() {
     if (!this.enabled) return;
+    if (this.resizeInProgress) return;
 
     const now = Date.now();
     const termWidth = Math.max(80, process.stdout.columns || 120);
-    const twoColumns = termWidth >= 140;
+    const twoColumns = this.uiLayout === 'horizontal' && termWidth >= 100;
     const columnGap = 2;
     const leftWidth = twoColumns ? Math.floor((termWidth - columnGap) / 2) : termWidth;
     const rightWidth = twoColumns ? (termWidth - columnGap - leftWidth) : termWidth;
@@ -488,55 +539,65 @@ export class BridgeDashboard {
     lines.push(`${UI.blue}${'═'.repeat(termWidth)}${UI.reset}`);
     lines.push('');
 
-    const bridgeStatsPanel = buildPanel('Bridge Stats', [
-      `Worker Name: ${this.options.workerName}`,
-      `Model: ${this.options.model}`,
-      `Threads: ${formatInt(this.options.threadsInt)} | Context: ${formatInt(this.options.ctxInt)} | Max Length: ${formatInt(this.options.maxLengthInt)}`,
-      `Jobs Received: ${formatInt(this.stats.jobsReceived)}`,
-      `Jobs Received (60s): ${formatInt(jobsReceivedRate)}/min`,
-      `Jobs Received Trend: ${receivedSpark}`,
-      `Jobs Processed: ${formatInt(this.stats.jobsProcessed)}`,
-      `Jobs Processed (60s): ${formatInt(jobsProcessedRate)}/min`,
-      `Jobs Processed Trend: ${processedSpark}`,
-      `Total Tokens: ${formatInt(this.stats.totalTokens)}`,
-      `Bridge Avg Speed: ${Number.isFinite(avgBridgeTps) ? `${formatFloat(avgBridgeTps, 1)} tok/s` : 'n/a'}`,
-      `Kudos Since Worker Start: ${formatInt(this.stats.totalKudos)}`,
-      `Avg Kudos/Job: ${Number.isFinite(avgKudosPerJob) ? formatFloat(avgKudosPerJob, 2) : 'n/a'}`,
-      `Last Job Kudos: ${Number.isFinite(this.stats.lastJobKudos) ? formatFloat(this.stats.lastJobKudos, 2) : 'n/a'} | Last TPS: ${Number.isFinite(this.stats.lastJobTps) ? formatFloat(this.stats.lastJobTps, 1) : 'n/a'}`,
-      `Last Job Duration: ${formatDurationMs(this.stats.lastJobDurationMs)}`,
-      `CSAM Triggers: ${formatInt(this.stats.csamTriggers)}`,
-      `Last Thread Runtime: ${formatDurationMs(this.stats.lastRuntimeMs)}`
-    ], leftWidth);
+    const leftPanels = [];
+    const rightPanels = [];
 
-    const threadRows = [];
-    for (let threadId = 0; threadId < this.options.threadsInt; threadId++) {
-      const state = this.stats.threadStates.get(threadId) || { status: 'idle', jobId: null, sinceMs: null };
-      const elapsed = Number.isFinite(state.sinceMs) ? formatDurationMs(now - state.sinceMs, '-') : '-';
-      const jobText = state.jobId ? ` #${state.jobId}` : '';
-      threadRows.push(`Thread ${threadId}: [${spinner}] ${String(state.status).toUpperCase()}${jobText} (${elapsed})`);
+    if (this.uiShowBridgeStats) {
+      leftPanels.push(buildPanel('Bridge Stats', [
+        `Worker Name: ${this.options.workerName}`,
+        `Model: ${this.options.model}`,
+        `Threads: ${formatInt(this.options.threadsInt)} | Context: ${formatInt(this.options.ctxInt)} | Max Length: ${formatInt(this.options.maxLengthInt)}`,
+        `Jobs Received: ${formatInt(this.stats.jobsReceived)}`,
+        `Jobs Received (60s): ${formatInt(jobsReceivedRate)}/min`,
+        `Jobs Received Trend: ${receivedSpark}`,
+        `Jobs Processed: ${formatInt(this.stats.jobsProcessed)}`,
+        `Jobs Processed (60s): ${formatInt(jobsProcessedRate)}/min`,
+        `Jobs Processed Trend: ${processedSpark}`,
+        `Total Tokens: ${formatInt(this.stats.totalTokens)}`,
+        `Bridge Avg Speed: ${Number.isFinite(avgBridgeTps) ? `${formatFloat(avgBridgeTps, 1)} tok/s` : 'n/a'}`,
+        `Kudos Since Worker Start: ${formatInt(this.stats.totalKudos)}`,
+        `Avg Kudos/Job: ${Number.isFinite(avgKudosPerJob) ? formatFloat(avgKudosPerJob, 2) : 'n/a'}`,
+        `Last Job Kudos: ${Number.isFinite(this.stats.lastJobKudos) ? formatFloat(this.stats.lastJobKudos, 2) : 'n/a'} | Last TPS: ${Number.isFinite(this.stats.lastJobTps) ? formatFloat(this.stats.lastJobTps, 1) : 'n/a'}`,
+        `Last Job Duration: ${formatDurationMs(this.stats.lastJobDurationMs)}`,
+        `CSAM Triggers: ${formatInt(this.stats.csamTriggers)}`,
+        `Last Thread Runtime: ${formatDurationMs(this.stats.lastRuntimeMs)}`
+      ], leftWidth));
     }
-    const threadPanel = buildPanel('Thread Activity', threadRows, leftWidth);
 
-    const userRows = [
-      `Username: ${username ?? 'not provided by API'}`,
-      `User ID: ${userId ?? 'not provided by API'}`,
-      `Trusted: ${formatBool(trusted)} | Moderator: ${formatBool(moderator)}`,
-      `Workers (account): ${workerCountUser !== null ? formatInt(workerCountUser) : 'not provided by API'}`,
-      `Total Kudos: ${formatInt(userKudos)}`
-    ];
-    userRows.push(...kudosDetailRows);
+    if (this.uiShowThreadActivity) {
+      const threadRows = [];
+      for (let threadId = 0; threadId < this.options.threadsInt; threadId++) {
+        const state = this.stats.threadStates.get(threadId) || { status: 'idle', jobId: null, sinceMs: null };
+        const elapsed = Number.isFinite(state.sinceMs) ? formatDurationMs(now - state.sinceMs, '-') : '-';
+        const jobText = state.jobId ? ` #${state.jobId}` : '';
+        threadRows.push(`Thread ${threadId}: [${spinner}] ${String(state.status).toUpperCase()}${jobText} (${elapsed})`);
+      }
+      leftPanels.push(buildPanel('Thread Activity', threadRows, leftWidth));
+    }
 
-    const userPanel = buildPanel('AI Horde User', userRows, rightWidth);
+    if (this.uiShowAiHordeUser) {
+      const userRows = [
+        `Username: ${username ?? 'not provided by API'}`,
+        `User ID: ${userId ?? 'not provided by API'}`,
+        `Trusted: ${formatBool(trusted)} | Moderator: ${formatBool(moderator)}`,
+        `Workers (account): ${workerCountUser !== null ? formatInt(workerCountUser) : 'not provided by API'}`,
+        `Total Kudos: ${formatInt(userKudos)}`
+      ];
+      userRows.push(...kudosDetailRows);
+      rightPanels.push(buildPanel('AI Horde User', userRows, rightWidth));
+    }
 
-    const perfPanel = buildPanel('AI Horde Performance', [
-      `Global Queue: ${formatInt(queuedRequests)} | Text Queue: ${formatInt(queuedTextRequests)}`,
-      `Workers: ${formatInt(workerCount)} total | ${formatInt(textWorkerCount)} text`,
-      `Threads: ${formatInt(threadCount)} total | ${formatInt(textThreadCount)} text`,
-      `Queued Tokens: ${formatFloat(queuedTokens, 1)} | Past Minute: ${formatFloat(pastMinuteTokens, 1)}`,
-      `Text Speed (network): ${Number.isFinite(textTps) ? `${formatFloat(textTps, 1)} tokens/sec` : 'n/a'}`,
-      `Last Fetch: ${formatTimestamp(this.stats.lastHordeFetchAt)}`,
-      `Fetch Error: ${this.stats.lastHordeFetchError ?? 'none'}`
-    ], rightWidth);
+    if (this.uiShowAiHordePerformance) {
+      rightPanels.push(buildPanel('AI Horde Performance', [
+        `Global Queue: ${formatInt(queuedRequests)} | Text Queue: ${formatInt(queuedTextRequests)}`,
+        `Workers: ${formatInt(workerCount)} total | ${formatInt(textWorkerCount)} text`,
+        `Threads: ${formatInt(threadCount)} total | ${formatInt(textThreadCount)} text`,
+        `Queued Tokens: ${formatFloat(queuedTokens, 1)} | Past Minute: ${formatFloat(pastMinuteTokens, 1)}`,
+        `Text Speed (network): ${Number.isFinite(textTps) ? `${formatFloat(textTps, 1)} tokens/sec` : 'n/a'}`,
+        `Last Fetch: ${formatTimestamp(this.stats.lastHordeFetchAt)}`,
+        `Fetch Error: ${this.stats.lastHordeFetchError ?? 'none'}`
+      ], rightWidth));
+    }
 
     const recentRows = this.stats.recentJobs.map((job) => {
       if (String(job.status).startsWith('csam_')) {
@@ -553,17 +614,30 @@ export class BridgeDashboard {
       return `#${job.id} ${String(job.status).toUpperCase()} | kudos ${kudosText} | tok ${tokenText} | tps ${tpsText}${oaFlagText} | ${durationText}`;
     });
 
-    const recentPanel = buildPanel('Recent Jobs', recentRows.length ? recentRows : ['No completed jobs yet.'], twoColumns ? termWidth : leftWidth);
+    const recentPanel = this.uiShowRecentJobs
+      ? buildPanel('Recent Jobs', recentRows.length ? recentRows : ['No completed jobs yet.'], twoColumns ? termWidth : leftWidth)
+      : null;
 
     if (twoColumns) {
-      const leftStack = stackPanels([bridgeStatsPanel, threadPanel]);
-      const rightStack = stackPanels([userPanel, perfPanel]);
-      lines.push(...mergeColumns(leftStack, rightStack, leftWidth, rightWidth, columnGap));
+      const leftStack = stackPanels(leftPanels);
+      const rightStack = stackPanels(rightPanels);
+      if (leftStack.length && rightStack.length) {
+        lines.push(...mergeColumns(leftStack, rightStack, leftWidth, rightWidth, columnGap));
+      } else if (leftStack.length) {
+        lines.push(...leftStack);
+      } else if (rightStack.length) {
+        lines.push(...rightStack);
+      }
     } else {
-      lines.push(...stackPanels([bridgeStatsPanel, threadPanel, userPanel, perfPanel]));
+      const verticalPanels = [...leftPanels, ...rightPanels];
+      if (verticalPanels.length) {
+        lines.push(...stackPanels(verticalPanels));
+      }
     }
-    lines.push('');
-    lines.push(...recentPanel);
+    if (recentPanel) {
+      lines.push('');
+      lines.push(...recentPanel);
+    }
 
     const lastErrorValue = this.stats.lastError ?? 'none';
     lines.push(
@@ -578,7 +652,32 @@ export class BridgeDashboard {
       lines.push(`${UI.dim}${UI.brightWhite}Press Ctrl+C to exit.${UI.reset}`);
     }
 
-    process.stdout.write(`\x1b[2J\x1b[H${lines.join('\n')}\n`);
+    const frameLines = lines.map((line) => `\x1b[2K${line}`);
+    const extraOldLines = Math.max(0, this.lastRenderedLineCount - frameLines.length);
+    for (let i = 0; i < extraOldLines; i++) {
+      frameLines.push('\x1b[2K');
+    }
+    const writes = [];
+    if (this.forceFullRedraw) {
+      writes.push('\x1b[2J\x1b[H');
+      this.forceFullRedraw = false;
+    }
+    const total = Math.max(this.lastFrameLines.length, frameLines.length);
+
+    for (let i = 0; i < total; i++) {
+      const nextLine = frameLines[i] ?? '\x1b[2K';
+      const prevLine = this.lastFrameLines[i];
+      if (nextLine === prevLine) continue;
+      writes.push(`\x1b[${i + 1};1H${nextLine}`);
+    }
+
+    writes.push(`\x1b[${frameLines.length + 1};1H`);
+
+    this.lastFrameLines = frameLines;
+    this.lastRenderedLineCount = frameLines.length;
+    if (writes.length > 0) {
+      process.stdout.write(writes.join(''));
+    }
   }
 
   async refreshHordeData() {
@@ -613,6 +712,8 @@ export class BridgeDashboard {
     if (!this.enabled) return;
 
     setConsoleLoggingEnabled(this.logger, false);
+    process.stdout.write('\x1b[?25l');
+    process.stdout.on('resize', this.handleResize);
     this.render();
     this.renderTimer = setInterval(() => this.render(), 1000);
     this.fetchTimer = setInterval(() => {
@@ -635,8 +736,18 @@ export class BridgeDashboard {
       clearInterval(this.fetchTimer);
       this.fetchTimer = null;
     }
+    if (this.resizeTimer) {
+      clearTimeout(this.resizeTimer);
+      this.resizeTimer = null;
+    }
+    this.resizeInProgress = false;
+    process.stdout.off('resize', this.handleResize);
+    this.lastRenderedLineCount = 0;
+    this.lastFrameLines = [];
+    this.forceFullRedraw = true;
 
     if (this.enabled) {
+      process.stdout.write('\x1b[?25h');
       setConsoleLoggingEnabled(this.logger, true);
     }
   }

@@ -1,7 +1,9 @@
 import fs from 'fs';
+import { RECENT_JOBS_LIMIT } from './constants.js';
 
 const CONFIG_FILE = 'config.yaml';
 const ALLOWED_UI_THEMES = ['acide', 'cyberpunk', 'matrix', 'monochrome'];
+const ALLOWED_UI_LAYOUTS = ['vertical', 'horizontal'];
 const ALLOWED_CSAM_MODES = ['disabled', 'regex', 'openai'];
 const ALLOWED_CSAM_POSITIVE_ACTIONS = ['respond', 'fault'];
 const OPENAI_MODERATION_HARD_MAX_INPUT_TOKENS = 30000;
@@ -99,16 +101,39 @@ export function parseConfig() {
     outputPrompt: '',
     logFile: '',
     uiTheme: 'acide',
+    UI: {
+      layout: 'horizontal',
+      showBridgeStats: 'enabled',
+      showThreadActivity: 'enabled',
+      showAiHordeUser: 'enabled',
+      showAiHordePerformance: 'enabled',
+      showRecentJobs: 'enabled',
+      recentJobsCount: RECENT_JOBS_LIMIT
+    },
     threads: 1,
     timeout: 120
   };
 
   const options = { ...defaults, ...loaded };
+  const uiSection = normalizeUiSection(options.UI, loaded.ui);
   options.enableCsamFilter = parseCsamMode(options.enableCsamFilter);
   options.csamPositiveAction = parseCsamPositiveAction(options.csamPositiveAction);
   options.nsfw = parseBoolean(options.nsfw, 'nsfw');
   options.enforceCtxLimit = parseBoolean(options.enforceCtxLimit, 'enforceCtxLimit');
   options.threadPollStagger = parseBoolean(options.threadPollStagger, 'threadPollStagger');
+  options.uiLayout = parseUiLayout(uiSection.layout);
+  options.uiShowBridgeStats = parseBoolean(uiSection.showBridgeStats, 'UI.showBridgeStats');
+  options.uiShowThreadActivity = parseBoolean(uiSection.showThreadActivity, 'UI.showThreadActivity');
+  options.uiShowAiHordeUser = parseBoolean(uiSection.showAiHordeUser, 'UI.showAiHordeUser');
+  options.uiShowAiHordePerformance = parseBoolean(uiSection.showAiHordePerformance, 'UI.showAiHordePerformance');
+  options.uiShowRecentJobs = parseBoolean(uiSection.showRecentJobs, 'UI.showRecentJobs');
+  options.uiRecentJobsCount = parsePositiveIntInRange(
+    uiSection.recentJobsCount,
+    'UI.recentJobsCount',
+    1,
+    50,
+    RECENT_JOBS_LIMIT
+  );
   options.serverApiKey = normalizeOptionalString(options.serverApiKey);
   options.serverModel = normalizeOptionalString(options.serverModel);
   options.openaiApiKey = normalizeOptionalString(options.openaiApiKey);
@@ -195,6 +220,36 @@ function normalizeUiTheme(value) {
   return theme;
 }
 
+function normalizeUiSection(primaryValue, secondaryValue) {
+  const base = {
+    layout: 'horizontal',
+    showBridgeStats: 'enabled',
+    showThreadActivity: 'enabled',
+    showAiHordeUser: 'enabled',
+    showAiHordePerformance: 'enabled',
+    showRecentJobs: 'enabled',
+    recentJobsCount: RECENT_JOBS_LIMIT
+  };
+
+  const primary = toPlainObject(primaryValue);
+  const secondary = toPlainObject(secondaryValue);
+  return { ...base, ...primary, ...secondary };
+}
+
+function toPlainObject(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value;
+}
+
+function parseUiLayout(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) return 'horizontal';
+  if (!ALLOWED_UI_LAYOUTS.includes(normalized)) {
+    throw new Error(`Invalid UI.layout value "${value}". Use vertical/horizontal.`);
+  }
+  return normalized;
+}
+
 function stripHashComment(line) {
   let inSingle = false;
   let inDouble = false;
@@ -259,42 +314,111 @@ function parseScalar(valueRaw) {
 }
 
 function parseSimpleYaml(rawText) {
-  const result = {};
-  let currentListKey = null;
-
   const lines = rawText.split(/\r?\n/);
-  for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
-    const originalLine = lines[lineNumber];
-    const noComment = stripHashComment(originalLine);
-    if (!noComment.trim()) continue;
 
-    const isIndented = /^\s+/.test(noComment);
+  function getLineInfo(lineNumber) {
+    if (lineNumber < 0 || lineNumber >= lines.length) return null;
+    const noComment = stripHashComment(lines[lineNumber]);
+    if (!noComment.trim()) return null;
+
+    const indentMatch = /^(\s*)/.exec(noComment);
+    const indent = indentMatch ? indentMatch[1].length : 0;
     const trimmed = noComment.trim();
-
-    if (isIndented) {
-      if (currentListKey && trimmed.startsWith('- ')) {
-        result[currentListKey].push(parseScalar(trimmed.slice(2)));
-        continue;
-      }
-      throw new Error(`Unsupported indentation at line ${lineNumber + 1}`);
-    }
-
-    currentListKey = null;
-    const match = /^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/.exec(trimmed);
-    if (!match) {
-      throw new Error(`Invalid key/value at line ${lineNumber + 1}`);
-    }
-
-    const key = match[1];
-    const rawValue = match[2];
-    if (rawValue.trim() === '') {
-      result[key] = [];
-      currentListKey = key;
-      continue;
-    }
-
-    result[key] = parseScalar(rawValue);
+    return { lineNumber, indent, trimmed };
   }
 
-  return result;
+  function nextSignificant(startLine) {
+    for (let i = startLine; i < lines.length; i++) {
+      const info = getLineInfo(i);
+      if (info) return info;
+    }
+    return null;
+  }
+
+  function parseList(expectedIndent, startLine) {
+    const out = [];
+    let lineNumber = startLine;
+
+    while (lineNumber < lines.length) {
+      const info = getLineInfo(lineNumber);
+      if (!info) {
+        lineNumber += 1;
+        continue;
+      }
+      if (info.indent < expectedIndent) break;
+      if (info.indent > expectedIndent) {
+        throw new Error(`Unsupported indentation at line ${info.lineNumber + 1}`);
+      }
+      if (!info.trimmed.startsWith('- ')) {
+        throw new Error(`Invalid list item at line ${info.lineNumber + 1}`);
+      }
+
+      const valueRaw = info.trimmed.slice(2);
+      if (!valueRaw.trim()) {
+        throw new Error(`Empty list item is not supported at line ${info.lineNumber + 1}`);
+      }
+      out.push(parseScalar(valueRaw));
+      lineNumber += 1;
+    }
+
+    return { value: out, nextLine: lineNumber };
+  }
+
+  function parseMap(expectedIndent, startLine) {
+    const out = {};
+    let lineNumber = startLine;
+
+    while (lineNumber < lines.length) {
+      const info = getLineInfo(lineNumber);
+      if (!info) {
+        lineNumber += 1;
+        continue;
+      }
+      if (info.indent < expectedIndent) break;
+      if (info.indent > expectedIndent) {
+        throw new Error(`Unsupported indentation at line ${info.lineNumber + 1}`);
+      }
+      if (info.trimmed.startsWith('- ')) {
+        throw new Error(`Unexpected list item at line ${info.lineNumber + 1}`);
+      }
+
+      const match = /^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/.exec(info.trimmed);
+      if (!match) {
+        throw new Error(`Invalid key/value at line ${info.lineNumber + 1}`);
+      }
+
+      const key = match[1];
+      const rawValue = match[2];
+
+      if (rawValue.trim() !== '') {
+        out[key] = parseScalar(rawValue);
+        lineNumber += 1;
+        continue;
+      }
+
+      const child = nextSignificant(info.lineNumber + 1);
+      if (!child || child.indent <= expectedIndent) {
+        out[key] = [];
+        lineNumber += 1;
+        continue;
+      }
+      if (child.indent !== expectedIndent + 2) {
+        throw new Error(`Unsupported indentation at line ${child.lineNumber + 1}`);
+      }
+
+      if (child.trimmed.startsWith('- ')) {
+        const parsed = parseList(expectedIndent + 2, child.lineNumber);
+        out[key] = parsed.value;
+        lineNumber = parsed.nextLine;
+      } else {
+        const parsed = parseMap(expectedIndent + 2, child.lineNumber);
+        out[key] = parsed.value;
+        lineNumber = parsed.nextLine;
+      }
+    }
+
+    return { value: out, nextLine: lineNumber };
+  }
+
+  return parseMap(0, 0).value;
 }

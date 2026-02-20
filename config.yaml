@@ -1,4 +1,4 @@
-# Belarrius AI Horde Bridge v1.2
+# Belarrius AI Horde Bridge v1.3
 # Start command: node index.js
 
 # AI Horde API key (required)
@@ -88,6 +88,24 @@ timeout: 120
 # Lower = faster pickup but more API traffic.
 # Higher = less traffic but more idle latency between jobs.
 refreshTime: 5000
+
+# UI layout and sections visibility
+# layout:
+# - horizontal: prefer 2 columns
+# - vertical: force 1 column
+# show* values: enabled, disabled
+# recentJobsCount range: 1..50
+# Example with 4 threads on 1080p:
+# - keep layout: horizontal
+# - optionally disable one or two panels to reduce height
+UI:
+  layout: "horizontal"
+  showBridgeStats: "enabled"
+  showThreadActivity: "enabled"
+  showAiHordeUser: "enabled"
+  showAiHordePerformance: "enabled"
+  showRecentJobs: "enabled"
+  recentJobsCount: 7
 
 # Safety
 # Possible values: enabled, disabled

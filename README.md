@@ -1,4 +1,4 @@
-# Belarrius AI Horde Bridge v1.1
+# Belarrius AI Horde Bridge v1.2
 
 Node.js bridge to connect one or more local LLM servers to **KoboldAI Horde** as a text worker, with a focus on robustness (retries, live dashboard, optional CSAM filtering, TPS limiting).
 
@@ -100,6 +100,12 @@ Possible values for `serverEngine`:
 Aliases accepted for backward compatibility:
 - `textgenwebui`
 - `oogabooga`
+- `lmstudio`
+- `localai`
+- `mistralrs` (and `mistral.rs`)
+- `mlx`
+- `openllm`
+- `aphrodite` (and `aphrodite-engine`)
 
 For `serverEngine: "ollama"`:
 - Use `serverUrl: "http://localhost:11434"` (default Ollama URL)
@@ -112,6 +118,33 @@ For `serverEngine: "oobabooga"`:
 - Set `serverModel` (required), example: `Llama-3.1-8B-Instruct`
 - If WebUI API key is enabled, set `serverApiKey` to either raw key or `Bearer <key>`
 - Keep `model` as your Horde-advertised name, example: `oobabooga/Llama-3.1-8B-Instruct`
+
+LM Studio should also work with this same OpenAI-compatible path (`/v1/*`), or via alias:
+- `serverEngine: "lmstudio"`
+- Typical `serverUrl`: `http://localhost:1234`
+- Example advertised model: `lmstudio/your-model-name`
+
+LocalAI should also work with this same OpenAI-compatible path (`/v1/*`), or via alias:
+- `serverEngine: "localai"`
+- Typical `serverUrl`: `http://localhost:8080`
+- Example advertised model: `localai/your-model-name`
+
+mistral.rs should also work with this same OpenAI-compatible path (`/v1/*`), or via alias:
+- `serverEngine: "mistralrs"` (or `mistral.rs`)
+- Keep `serverModel` set to your loaded model identifier
+- Example advertised model: `mistralrs/your-model-name`
+
+MLX can work when used through an OpenAI-compatible server implementation:
+- `serverEngine: "mlx"`
+- Keep `serverModel` set to your served model identifier
+- Example advertised model: `mlx/your-model-name`
+
+OpenLLM and Aphrodite-engine may also work if they expose OpenAI-compatible endpoints
+matching this bridge path (`/v1/models` + `/v1/completions`).
+
+Aliases available:
+- `serverEngine: "openllm"`
+- `serverEngine: "aphrodite"` (or `aphrodite-engine`)
 
 `priorityUsernames` must be a YAML list. Example:
 

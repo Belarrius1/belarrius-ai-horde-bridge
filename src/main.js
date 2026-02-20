@@ -11,7 +11,7 @@ function buildServerHeaders(serverEngine, serverApiKey) {
   if (!key) return {};
 
   const engine = String(serverEngine ?? '').trim().toLowerCase();
-  if (['oobabooga', 'textgenwebui', 'oogabooga'].includes(engine)) {
+  if (['oobabooga', 'textgenwebui', 'oogabooga', 'lmstudio', 'localai', 'mistralrs', 'mistral.rs', 'mlx', 'openllm', 'aphrodite', 'aphrodite-engine'].includes(engine)) {
     return {
       Authorization: /^Bearer\s+/i.test(key) ? key : `Bearer ${key}`
     };

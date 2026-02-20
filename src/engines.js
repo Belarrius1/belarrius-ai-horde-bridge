@@ -34,6 +34,14 @@ export function buildEngines(logger) {
     oobabooga,
     textgenwebui: oobabooga,
     oogabooga: oobabooga,
+    lmstudio: oobabooga,
+    localai: oobabooga,
+    mistralrs: oobabooga,
+    'mistral.rs': oobabooga,
+    mlx: oobabooga,
+    openllm: oobabooga,
+    aphrodite: oobabooga,
+    'aphrodite-engine': oobabooga,
 
     ollama: {
       healthUrl: '/api/tags',

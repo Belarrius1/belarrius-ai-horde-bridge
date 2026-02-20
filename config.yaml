@@ -1,4 +1,4 @@
-# Belarrius AI Horde Bridge v1.1
+# Belarrius AI Horde Bridge v1.2
 # Start command: node index.js
 
 # AI Horde API key (required)
@@ -25,12 +25,15 @@ workerInfo: ""
 
 # Local inference engine (required)
 # Possible values: ollama, oobabooga, llamacpp, koboldcpp, vllm, sglang, tabbyapi
-# Aliases accepted for backward compatibility: textgenwebui, oogabooga
+# Aliases accepted for compatibility: textgenwebui, oogabooga, lmstudio, localai, mistralrs, mistral.rs, mlx, openllm, aphrodite, aphrodite-engine
+# LM Studio, LocalAI, mistral.rs and many OpenAI-compatible servers should work via this mode.
 serverEngine: "llamacpp"
 
 # Local server URL
 # For ollama default is usually: http://localhost:11434
-# For oobabooga OpenAI endpoint: usually http://localhost:5000
+# For oobabooga/LM Studio/LocalAI OpenAI endpoint:
+# usually http://localhost:5000 (WebUI), http://localhost:1234 (LM Studio), http://localhost:8080 (LocalAI)
+# mistral.rs and MLX ports depend on your server command/options.
 serverUrl: "http://localhost:8000"
 
 # Optional: Authorization header sent to local server ("" = disabled)
@@ -41,12 +44,18 @@ serverApiKey: ""
 
 # Optional: model override sent to local server ("" = disabled)
 # Required when serverEngine is "ollama" (example: llama3.1:8b)
-# Required when serverEngine is "oobabooga"
+# Required when serverEngine is "oobabooga", "lmstudio", "localai", "mistralrs"/"mistral.rs", "mlx", "openllm" or "aphrodite"
 serverModel: ""
 
 # Model name advertised to AI Horde (required)
 # For ollama you can use: ollama/your-model-name
 # For oobabooga you can use: oobabooga/your-model-name
+# For LM Studio you can use: lmstudio/your-model-name
+# For LocalAI you can use: localai/your-model-name
+# For mistral.rs you can use: mistralrs/your-model-name
+# For MLX you can use: mlx/your-model-name
+# For OpenLLM you can use: openllm/your-model-name
+# For Aphrodite you can use: aphrodite/your-model-name
 model: "llamacpp/your-model-name"
 
 # Context & generation settings

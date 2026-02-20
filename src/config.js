@@ -131,8 +131,8 @@ export function parseConfig() {
   if (!options.ctx) throw new Error('"ctx" is required in config.yaml');
   if (!options.serverEngine) throw new Error('"serverEngine" is required in config.yaml');
   const serverEngine = String(options.serverEngine).trim().toLowerCase();
-  if (['ollama', 'oobabooga', 'textgenwebui', 'oogabooga'].includes(serverEngine) && !options.serverModel) {
-    throw new Error('"serverModel" is required in config.yaml when serverEngine is ollama/oobabooga.');
+  if (['ollama', 'oobabooga', 'textgenwebui', 'oogabooga', 'lmstudio', 'localai', 'mistralrs', 'mistral.rs', 'mlx', 'openllm', 'aphrodite', 'aphrodite-engine'].includes(serverEngine) && !options.serverModel) {
+    throw new Error('"serverModel" is required in config.yaml when serverEngine is ollama/oobabooga/lmstudio/localai/mistralrs/mlx/openllm/aphrodite.');
   }
   if (!options.AiHordeApiKey || options.AiHordeApiKey === '0000000000') {
     throw new Error('"AiHordeApiKey" is required in config.yaml and cannot be the default placeholder value.');

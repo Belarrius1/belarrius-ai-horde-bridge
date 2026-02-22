@@ -71,7 +71,8 @@ async function main() {
     running: true,
     failedRequestsInARow: 0,
     maxFailedRequests: MAX_FAILED_REQUESTS,
-    pollEpochMs: Date.now()
+    pollEpochMs: Date.now(),
+    llamacppSlotsState: null
   };
   let sigintCount = 0;
 

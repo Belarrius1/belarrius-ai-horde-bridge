@@ -1,4 +1,4 @@
-# Belarrius AI Horde Bridge v1.3
+# Belarrius AI Horde Bridge v1.4
 # Start command: node index.js
 
 # AI Horde API key (required)
@@ -40,7 +40,24 @@ serverUrl: "http://localhost:8000"
 # For oobabooga, you can set either:
 # - raw key (bridge will send "Bearer <key>")
 # - full header value (example: "Bearer <key>")
+# For llama.cpp, this same header is reused for GET /slots when enabled below.
 serverApiKey: ""
+
+# llama.cpp slot-aware polling and UI telemetry.
+# Possible values: enabled, disabled
+# Requires llama-server started with "--slots".
+# Uses serverUrl + "/slots" and reuses serverApiKey header if present.
+llamacppSlots: "enabled"
+
+# llama.cpp strict slot mode.
+# Possible values: enabled, disabled
+# - enabled: never polls Horde unless /slots is reachable and reports freeSlots > 0
+# - disabled: falls back to normal polling when /slots is unavailable
+llamacppSlotsStrict: "disabled"
+
+# Cache time (milliseconds) between /slots fetches.
+# Range: 250..10000
+llamacppSlotsCacheMs: 1000
 
 # Optional: model override sent to local server ("" = disabled)
 # Required when serverEngine is "ollama" (example: llama3.1:8b)

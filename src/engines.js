@@ -160,6 +160,7 @@ export function buildEngines(logger) {
 
     llamacpp: {
       healthUrl: '/props',
+      slotsUrl: '/slots',
       generateUrl: '/completion',
       generatePayload: (payload) => ({
         prompt: payload.prompt,
@@ -174,7 +175,8 @@ export function buildEngines(logger) {
         repeat_last_n: payload.rep_pen_range ?? 64,
         typical_p: payload.typical ?? 0.0
       }),
-      extractGeneration: (data) => data.content
+      extractGeneration: (data) => data.content,
+      extractSlots: (data) => (Array.isArray(data) ? data : null)
     }
   };
 }

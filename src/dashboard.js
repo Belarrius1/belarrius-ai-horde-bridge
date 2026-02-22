@@ -190,6 +190,15 @@ function formatTimestamp(ts) {
   return new Date(ts).toLocaleTimeString(undefined, { hour12: false });
 }
 
+function formatLlamaSlotStage(stage) {
+  const normalized = String(stage ?? '').trim().toLowerCase();
+  if (normalized === 'preprompt') return 'PREPROMPT';
+  if (normalized === 'processing') return 'PROCESSING';
+  if (normalized === 'pending') return 'PENDING';
+  if (normalized === 'idle') return 'IDLE';
+  return 'UNKNOWN';
+}
+
 function stripAnsi(value) {
   return String(value ?? '').replace(ANSI_RE, '');
 }
@@ -371,7 +380,8 @@ export class BridgeDashboard {
       maintenanceMode: false,
       gracefulShutdownRequested: false,
       hordeUser: null,
-      hordePerformance: null
+      hordePerformance: null,
+      llamaSlots: null
     };
   }
 
@@ -381,6 +391,24 @@ export class BridgeDashboard {
 
   requestGracefulShutdown() {
     this.stats.gracefulShutdownRequested = true;
+  }
+
+  setLlamaSlotsSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return;
+    this.stats.llamaSlots = {
+      enabled: snapshot.enabled === true,
+      endpointAvailable: snapshot.endpointAvailable === true,
+      lastUpdatedAt: Number.isFinite(snapshot.lastUpdatedAt) ? snapshot.lastUpdatedAt : Date.now(),
+      lastFetchError: snapshot.lastFetchError ?? null,
+      totalSlots: toNumberOrNull(snapshot.totalSlots) ?? 0,
+      freeSlots: toNumberOrNull(snapshot.freeSlots) ?? 0,
+      prepromptSlots: toNumberOrNull(snapshot.prepromptSlots) ?? 0,
+      processingSlots: toNumberOrNull(snapshot.processingSlots) ?? 0,
+      pendingSlots: toNumberOrNull(snapshot.pendingSlots) ?? 0,
+      ctxMin: toNumberOrNull(snapshot.ctxMin),
+      ctxMax: toNumberOrNull(snapshot.ctxMax),
+      slots: Array.isArray(snapshot.slots) ? snapshot.slots : []
+    };
   }
 
   pruneTimeline(timeline, nowMs = Date.now()) {
@@ -486,6 +514,7 @@ export class BridgeDashboard {
 
     const perf = this.stats.hordePerformance || {};
     const user = this.stats.hordeUser || {};
+    const llamaSlots = this.stats.llamaSlots;
 
     const userKudos = pickMetricNumber(user, ['kudos', 'kudos.value', 'kudos_details.accumulated']);
     const workerCountUser = pickMetricNumber(user, ['worker_count', 'workers', 'active_workers']);
@@ -543,7 +572,7 @@ export class BridgeDashboard {
     const rightPanels = [];
 
     if (this.uiShowBridgeStats) {
-      leftPanels.push(buildPanel('Bridge Stats', [
+      const bridgeRows = [
         `Worker Name: ${this.options.workerName}`,
         `Model: ${this.options.model}`,
         `Threads: ${formatInt(this.options.threadsInt)} | Context: ${formatInt(this.options.ctxInt)} | Max Length: ${formatInt(this.options.maxLengthInt)}`,
@@ -561,7 +590,26 @@ export class BridgeDashboard {
         `Last Job Duration: ${formatDurationMs(this.stats.lastJobDurationMs)}`,
         `CSAM Triggers: ${formatInt(this.stats.csamTriggers)}`,
         `Last Thread Runtime: ${formatDurationMs(this.stats.lastRuntimeMs)}`
-      ], leftWidth));
+      ];
+      if (String(this.options.serverEngine ?? '').trim().toLowerCase() === 'llamacpp') {
+        if (llamaSlots) {
+          const endpointStatus = llamaSlots.endpointAvailable ? 'active' : 'missing (--slots)';
+          const ctxRange = Number.isFinite(llamaSlots.ctxMin)
+            ? (llamaSlots.ctxMin === llamaSlots.ctxMax
+              ? formatInt(llamaSlots.ctxMin)
+              : `${formatInt(llamaSlots.ctxMin)}..${formatInt(llamaSlots.ctxMax)}`)
+            : 'n/a';
+          bridgeRows.push(`llama.cpp strict mode: ${this.options.llamacppSlotsStrict === true ? 'enabled' : 'disabled'}`);
+          bridgeRows.push(`llama.cpp /slots: ${endpointStatus}`);
+          bridgeRows.push(
+            `Slots: free ${formatInt(llamaSlots.freeSlots)} / total ${formatInt(llamaSlots.totalSlots)} | preprompt ${formatInt(llamaSlots.prepromptSlots)} | processing ${formatInt(llamaSlots.processingSlots)} | pending ${formatInt(llamaSlots.pendingSlots)}`
+          );
+          bridgeRows.push(`Slot Context (n_ctx): ${ctxRange}`);
+        } else {
+          bridgeRows.push('llama.cpp /slots: waiting first sample');
+        }
+      }
+      leftPanels.push(buildPanel('Bridge Stats', bridgeRows, leftWidth));
     }
 
     if (this.uiShowThreadActivity) {
@@ -597,6 +645,30 @@ export class BridgeDashboard {
         `Last Fetch: ${formatTimestamp(this.stats.lastHordeFetchAt)}`,
         `Fetch Error: ${this.stats.lastHordeFetchError ?? 'none'}`
       ], rightWidth));
+    }
+
+    if (String(this.options.serverEngine ?? '').trim().toLowerCase() === 'llamacpp' && llamaSlots) {
+      const slotRows = [
+        `Endpoint: ${llamaSlots.endpointAvailable ? 'active' : 'not available (launch llama-server with --slots)'}`,
+        `Last Sample: ${formatTimestamp(llamaSlots.lastUpdatedAt)}`,
+        `Last Error: ${llamaSlots.lastFetchError ?? 'none'}`
+      ];
+
+      for (const slot of llamaSlots.slots.slice(0, 12)) {
+        const slotId = formatInt(slot.id);
+        const stage = formatLlamaSlotStage(slot.stage);
+        const task = Number.isFinite(toNumberOrNull(slot.idTask)) ? `task ${formatInt(slot.idTask)}` : 'task -';
+        const decoded = Number.isFinite(toNumberOrNull(slot.nDecoded)) ? formatInt(slot.nDecoded) : '-';
+        const remain = Number.isFinite(toNumberOrNull(slot.nRemain)) ? formatInt(slot.nRemain) : '-';
+        const nCtx = Number.isFinite(toNumberOrNull(slot.nCtx)) ? formatInt(slot.nCtx) : '-';
+        slotRows.push(`Slot ${slotId}: ${stage} | ${task} | decoded ${decoded} | remain ${remain} | ctx ${nCtx}`);
+      }
+
+      if (llamaSlots.slots.length > 12) {
+        slotRows.push(`Additional Slots: +${formatInt(llamaSlots.slots.length - 12)} not shown`);
+      }
+
+      rightPanels.push(buildPanel('llama.cpp Slots', slotRows, rightWidth));
     }
 
     const recentRows = this.stats.recentJobs.map((job) => {

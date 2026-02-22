@@ -39,6 +39,65 @@ function getOpenAiCsamBoolean(result) {
   return minors;
 }
 
+function toFiniteNumberOrNull(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function parseLlamacppSlotsData(rawSlots) {
+  if (!Array.isArray(rawSlots)) return null;
+
+  const slots = rawSlots.map((slot, index) => {
+    const isProcessing = slot?.is_processing === true;
+    const idTask = toFiniteNumberOrNull(slot?.id_task);
+    const nCtx = toFiniteNumberOrNull(slot?.n_ctx);
+    const nextToken = Array.isArray(slot?.next_token) ? slot.next_token[0] : null;
+    const hasNextToken = nextToken?.has_next_token === true;
+    const nDecoded = toFiniteNumberOrNull(nextToken?.n_decoded);
+    const nRemain = toFiniteNumberOrNull(nextToken?.n_remain);
+
+    let stage = 'idle';
+    if (isProcessing && Number.isFinite(nDecoded) && nDecoded <= 0) {
+      stage = 'preprompt';
+    } else if (isProcessing) {
+      stage = 'processing';
+    } else if (hasNextToken) {
+      stage = 'pending';
+    }
+
+    return {
+      id: toFiniteNumberOrNull(slot?.id) ?? index,
+      idTask,
+      nCtx,
+      isProcessing,
+      hasNextToken,
+      nDecoded,
+      nRemain,
+      stage
+    };
+  });
+
+  const totalSlots = slots.length;
+  const prepromptSlots = slots.filter((slot) => slot.stage === 'preprompt').length;
+  const processingSlots = slots.filter((slot) => slot.stage === 'processing').length;
+  const pendingSlots = slots.filter((slot) => slot.stage === 'pending').length;
+  const freeSlots = slots.filter((slot) => slot.stage === 'idle').length;
+  const ctxValues = slots
+    .map((slot) => slot.nCtx)
+    .filter((value) => Number.isFinite(value));
+
+  return {
+    totalSlots,
+    freeSlots,
+    prepromptSlots,
+    processingSlots,
+    pendingSlots,
+    ctxMin: ctxValues.length ? Math.min(...ctxValues) : null,
+    ctxMax: ctxValues.length ? Math.max(...ctxValues) : null,
+    slots
+  };
+}
+
 export class BridgeWorker {
   constructor({
     threadId,
@@ -64,6 +123,126 @@ export class BridgeWorker {
     this.serverStatusCache = { lastRetrieved: null, lastStatus: null };
     this.nextAllowedAtMs = Date.now();
     this.throttleQueue = Promise.resolve();
+  }
+
+  isLlamacppSlotsEnabled() {
+    const engineName = String(this.options.serverEngine ?? '').trim().toLowerCase();
+    return (
+      engineName === 'llamacpp' &&
+      this.options.llamacppSlots === true &&
+      typeof this.engine.slotsUrl === 'string' &&
+      this.engine.slotsUrl.length > 0
+    );
+  }
+
+  async fetchLlamacppSlotsSnapshot(force = false) {
+    if (!this.isLlamacppSlotsEnabled()) return null;
+
+    if (!this.runtime.llamacppSlotsState || typeof this.runtime.llamacppSlotsState !== 'object') {
+      this.runtime.llamacppSlotsState = {
+        supported: null,
+        lastFetchAt: 0,
+        snapshot: null,
+        fetchPromise: null
+      };
+    }
+
+    const state = this.runtime.llamacppSlotsState;
+    const now = Date.now();
+    const cacheMs = Number.isFinite(this.options.llamacppSlotsCacheMs)
+      ? this.options.llamacppSlotsCacheMs
+      : 1000;
+
+    if (!force && state.snapshot && now - state.lastFetchAt < cacheMs) {
+      return state.snapshot;
+    }
+
+    if (state.fetchPromise) {
+      return state.fetchPromise;
+    }
+
+    state.fetchPromise = (async () => {
+      const slotsUrl = `${this.options.serverUrl}${this.engine.slotsUrl}`;
+      state.lastFetchAt = Date.now();
+      try {
+        const response = await axios.get(slotsUrl, {
+          headers: this.serverHeaders,
+          timeout: Math.min(this.options.timeoutMs, 10000)
+        });
+        const rawSlots = typeof this.engine.extractSlots === 'function'
+          ? this.engine.extractSlots(response.data)
+          : response.data;
+        const parsed = parseLlamacppSlotsData(rawSlots);
+        if (!parsed) {
+          const snapshot = {
+            enabled: true,
+            endpointAvailable: true,
+            lastUpdatedAt: state.lastFetchAt,
+            lastFetchError: 'invalid /slots payload',
+            totalSlots: 0,
+            freeSlots: 0,
+            prepromptSlots: 0,
+            processingSlots: 0,
+            pendingSlots: 0,
+            ctxMin: null,
+            ctxMax: null,
+            slots: []
+          };
+          state.supported = false;
+          state.snapshot = snapshot;
+          this.dashboard.setLlamaSlotsSnapshot(snapshot);
+          return snapshot;
+        }
+
+        state.supported = true;
+        const snapshot = {
+          enabled: true,
+          endpointAvailable: true,
+          lastUpdatedAt: state.lastFetchAt,
+          lastFetchError: null,
+          ...parsed
+        };
+        state.snapshot = snapshot;
+        this.dashboard.setLlamaSlotsSnapshot(snapshot);
+        return snapshot;
+      } catch (error) {
+        const status = error.response?.status ?? null;
+        const endpointAvailable = status === 404 ? false : state.supported !== false;
+
+        if (status === 404 && state.supported !== false) {
+          this.logger.warn('llama.cpp /slots unavailable (HTTP 404). Start llama-server with --slots to enable slot-aware polling.');
+        } else if (status && status !== 404) {
+          this.logger.debug(`llama.cpp /slots returned HTTP ${status}`);
+        } else if (!status) {
+          this.logger.debug(`llama.cpp /slots fetch error: ${error.message}`);
+        }
+
+        if (status === 404) state.supported = false;
+        const snapshot = {
+          enabled: true,
+          endpointAvailable,
+          lastUpdatedAt: state.lastFetchAt,
+          lastFetchError: status ? `/slots HTTP ${status}` : 'slots endpoint unreachable',
+          totalSlots: 0,
+          freeSlots: 0,
+          prepromptSlots: 0,
+          processingSlots: 0,
+          pendingSlots: 0,
+          ctxMin: null,
+          ctxMax: null,
+          slots: []
+        };
+        state.snapshot = snapshot;
+        this.dashboard.setLlamaSlotsSnapshot(snapshot);
+        return snapshot;
+      }
+    })();
+
+    try {
+      return await state.fetchPromise;
+    } finally {
+      state.fetchPromise = null;
+    }
   }
 
   async countGenerationTokens(generation, maxLengthHint) {
@@ -375,6 +554,8 @@ export class BridgeWorker {
       this.serverStatusCache.lastStatus = response.status === 200;
       if (!this.serverStatusCache.lastStatus) {
         this.dashboard.setLastError(`health check status ${response.status}`);
+      } else if (this.threadId < 0 && this.isLlamacppSlotsEnabled()) {
+        await this.fetchLlamacppSlotsSnapshot(true);
       }
     } catch (error) {
       this.serverStatusCache.lastStatus = false;
@@ -398,6 +579,23 @@ export class BridgeWorker {
 
     await this.waitForPollSlot();
     this.dashboard.setThreadState(this.threadId, 'polling');
+
+    if (this.isLlamacppSlotsEnabled()) {
+      const slots = await this.fetchLlamacppSlotsSnapshot();
+      const strictMode = this.options.llamacppSlotsStrict === true;
+      const hasEndpoint = slots?.endpointAvailable === true;
+      const hasCapacity = hasEndpoint && slots.totalSlots > 0 && slots.freeSlots > 0;
+      const shouldWaitForSlot = strictMode ? !hasCapacity : (hasEndpoint && slots.totalSlots > 0 && slots.freeSlots <= 0);
+
+      if (shouldWaitForSlot) {
+        this.dashboard.setThreadState(this.threadId, 'waiting-slot');
+        if (strictMode && !hasEndpoint) {
+          this.dashboard.setLastError('llama.cpp strict slot mode: waiting for /slots availability');
+        }
+        await sleep(Math.min(this.options.refreshTime, this.options.llamacppSlotsCacheMs));
+        return true;
+      }
+    }
 
     const serverOk = await this.validateServer();
     if (serverOk !== true) {

@@ -84,6 +84,9 @@ export function parseConfig() {
     serverEngine: null,
     serverModel: '',
     serverApiKey: '',
+    llamacppSlots: 'enabled',
+    llamacppSlotsStrict: 'disabled',
+    llamacppSlotsCacheMs: 1000,
     model: null,
     ctx: null,
     maxLength: 512,
@@ -135,6 +138,15 @@ export function parseConfig() {
     RECENT_JOBS_LIMIT
   );
   options.serverApiKey = normalizeOptionalString(options.serverApiKey);
+  options.llamacppSlots = parseBoolean(options.llamacppSlots, 'llamacppSlots');
+  options.llamacppSlotsStrict = parseBoolean(options.llamacppSlotsStrict, 'llamacppSlotsStrict');
+  options.llamacppSlotsCacheMs = parsePositiveIntInRange(
+    options.llamacppSlotsCacheMs,
+    'llamacppSlotsCacheMs',
+    250,
+    10000,
+    1000
+  );
   options.serverModel = normalizeOptionalString(options.serverModel);
   options.openaiApiKey = normalizeOptionalString(options.openaiApiKey);
   options.AiHordeApiKey = normalizeOptionalString(options.AiHordeApiKey);

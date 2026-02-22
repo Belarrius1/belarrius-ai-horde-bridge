@@ -1,4 +1,4 @@
-# Belarrius AI Horde Bridge v1.3
+# Belarrius AI Horde Bridge v1.4
 
 Node.js bridge to connect one or more local LLM servers to **KoboldAI Horde** as a text worker, with a focus on robustness (retries, live dashboard, optional CSAM filtering, TPS limiting).
 
@@ -19,6 +19,7 @@ This project is inspired by Medusa-Bridge and uses a modular architecture.
 - Context length enforcement for engines that support tokenize/detokenize
 - Optional prompt audit logging (`outputPrompt`)
 - Configurable local API key (`serverApiKey`)
+- llama.cpp slot-aware polling and live slot telemetry via `/slots` (with `--slots`)
 
 ## Supported Engines
 
@@ -87,6 +88,9 @@ Performance/network block:
 - `threads`: number of parallel jobs processed by the bridge
 - `timeout` (seconds): max wait for Horde pop/submit and local generation
 - `refreshTime` (milliseconds): polling frequency for new Horde jobs
+- `llamacppSlots`: `enabled` or `disabled` (llama.cpp only, requires `--slots`)
+- `llamacppSlotsStrict`: `enabled` or `disabled` (llama.cpp only)
+- `llamacppSlotsCacheMs`: `/slots` cache window in milliseconds (`250..10000`)
 
 UI block:
 - `UI.layout`: `horizontal` or `vertical`
@@ -167,6 +171,15 @@ matching this bridge path (`/v1/models` + `/v1/completions`).
 Aliases available:
 - `serverEngine: "openllm"`
 - `serverEngine: "aphrodite"` (or `aphrodite-engine`)
+
+For `serverEngine: "llamacpp"`:
+- Enable llama.cpp slots with `llamacppSlots: "enabled"` (default)
+- Optional strict mode with `llamacppSlotsStrict: "enabled"` (wait for a confirmed free slot before any Horde `pop`)
+- Start `llama-server` with `--slots` so `GET /slots` is available
+- The bridge reuses `serverApiKey` for `/slots` when authentication is enabled
+- If `/slots` is unavailable, fallback behavior depends on `llamacppSlotsStrict`:
+  - `disabled`: normal polling fallback
+  - `enabled`: waits until `/slots` becomes available and reports free capacity
 
 `priorityUsernames` must be a YAML list. Example:
 

@@ -1,4 +1,4 @@
-# Belarrius AI Horde Bridge v1.4
+# Belarrius AI Horde Bridge v1.5
 
 Node.js bridge to connect one or more local LLM servers to **KoboldAI Horde** as a text worker, with a focus on robustness (retries, live dashboard, optional CSAM filtering, TPS limiting).
 
@@ -76,6 +76,8 @@ Possible values:
 - `nsfw`: `enabled` or `disabled`
 - `enableCsamFilter`: `disabled`, `regex`, `openai`
 - `csamPositiveAction`: `respond` or `fault`
+- `csamResponseDelayMs`: delay before CSAM submit/fault in milliseconds (`0..60000`, default `5000`)
+- `chat_template_kwargs`: optional YAML object forwarded as `chat_template_kwargs` at each generation request
 - `enforceCtxLimit`: `enabled` or `disabled`
 - `uiTheme`: `acide`, `cyberpunk`, `matrix`, `monochrome`
 
@@ -210,7 +212,10 @@ CSAM:
 ```yaml
 enableCsamFilter: "openai"
 csamPositiveAction: "respond"
+csamResponseDelayMs: 5000
 csamBlockedResponse: "Your request has been filtered by this worker safety policy."
+chat_template_kwargs:
+  enable_thinking: false
 csamMetadataRef: "omni-moderation-latest sexual/minors"
 openaiModerationMaxTokens: 10000
 openaiApiKey: "sk-..."
@@ -220,6 +225,8 @@ In `openai` mode, the bridge calls `omni-moderation-latest` for each incoming pr
 The CSAM decision is based on the `sexual/minors` category boolean returned by OpenAI.
 If a prompt exceeds `openaiModerationMaxTokens`, it is truncated (prefix kept) before the OpenAI check.
 The practical maximum value is `30000`.
+When CSAM is triggered, the bridge waits `csamResponseDelayMs` before submitting the filtered response or fault to Horde (default `5000` ms).
+When `chat_template_kwargs` is non-empty, it is forwarded as `chat_template_kwargs` in every generation request (useful for flags like `enable_thinking: false`).
 With `csamPositiveAction: "respond"`, it submits a filtered result with:
 - `state: "csam"`
 - `generation: "<filtering message>"`

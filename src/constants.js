@@ -1,6 +1,6 @@
-export const BRIDGE_NAME = 'Belarrius AI Horde Bridge v1.4';
+export const BRIDGE_NAME = 'Belarrius AI Horde Bridge v1.5';
 export const BRIDGE_REPO = 'https://github.com/Belarrius1/belarrius-ai-horde-bridge';
-export const BRIDGE_AGENT = `Belarrius AI Horde Bridge:1.4:${BRIDGE_REPO}`;
+export const BRIDGE_AGENT = `Belarrius AI Horde Bridge:1.5:${BRIDGE_REPO}`;
 
 export const HORDE_API_BASE = 'https://aihorde.net/api/v2';
 export const HORDE_FETCH_INTERVAL_MS = 30000;

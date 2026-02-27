@@ -1,4 +1,4 @@
-# Belarrius AI Horde Bridge v1.4
+# Belarrius AI Horde Bridge v1.5
 
 Node.js bridge to connect one or more local LLM servers to **KoboldAI Horde** as a text worker, with a focus on robustness (retries, live dashboard, optional CSAM filtering, TPS limiting).
 

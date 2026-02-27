@@ -701,6 +701,14 @@ export class BridgeWorker {
 
       const isPositive = csamDecision.reason === 'csam_regex' || csamDecision.reason === 'csam_openai';
       const shouldRespond = isPositive && this.options.csamPositiveAction === 'respond';
+      const csamResponseDelayMs = Number.isFinite(this.options.csamResponseDelayMs)
+        ? Math.max(0, this.options.csamResponseDelayMs)
+        : 5000;
+
+      if (csamResponseDelayMs > 0) {
+        this.logger.info(`CSAM trigger detected, waiting ${csamResponseDelayMs}ms before submitting response.`);
+        await sleep(csamResponseDelayMs);
+      }
 
       let csamResult;
       if (shouldRespond) {
@@ -770,6 +778,18 @@ export class BridgeWorker {
 
     if (this.options.serverModel) {
       serverRequest.model = this.options.serverModel;
+    }
+
+    if (
+      this.options.chatTemplateKwargs &&
+      typeof this.options.chatTemplateKwargs === 'object' &&
+      !Array.isArray(this.options.chatTemplateKwargs) &&
+      Object.keys(this.options.chatTemplateKwargs).length > 0 &&
+      serverRequest &&
+      typeof serverRequest === 'object' &&
+      !Array.isArray(serverRequest)
+    ) {
+      serverRequest.chat_template_kwargs = this.options.chatTemplateKwargs;
     }
 
     if (this.engine.tokenize && this.engine.detokenize) {

@@ -141,8 +141,19 @@ enableCsamFilter: "regex"
 # - fault: keep old behavior (can increase worker drops/maintenance risk)
 csamPositiveAction: "respond"
 
+# Delay before submitting a CSAM response/fault to Horde (milliseconds)
+# Range: 0..60000
+csamResponseDelayMs: 5000
+
 # Text sent to requester when csamPositiveAction is "respond"
 csamBlockedResponse: "Your request has been filtered by this worker safety policy."
+
+# Optional kwargs forwarded as "chat_template_kwargs" to generation backends.
+# Leave empty by default: {}
+# Example:
+# chat_template_kwargs:
+#   enable_thinking: false
+chat_template_kwargs: {}
 
 # Optional metadata ref for Horde gen_metadata when CSAM is responded.
 # Leave empty for auto value.

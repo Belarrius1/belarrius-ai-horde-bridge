@@ -97,6 +97,8 @@ export function parseConfig() {
     nsfw: 'disabled',
     enableCsamFilter: 'regex',
     csamPositiveAction: 'respond',
+    csamResponseDelayMs: 5000,
+    chatTemplateKwargs: {},
     csamBlockedResponse: 'Your request has been filtered by this worker safety policy.',
     csamMetadataRef: 'omni-moderation-latest sexual/minors',
     openaiModerationMaxTokens: 10000,
@@ -152,6 +154,16 @@ export function parseConfig() {
   options.AiHordeApiKey = normalizeOptionalString(options.AiHordeApiKey);
   options.csamBlockedResponse = normalizeOptionalString(options.csamBlockedResponse);
   options.csamMetadataRef = normalizeOptionalString(options.csamMetadataRef);
+  options.chatTemplateKwargs = normalizePlainObject(
+    options.chatTemplateKwargs ?? options.chat_template_kwargs
+  );
+  options.csamResponseDelayMs = parsePositiveIntInRange(
+    options.csamResponseDelayMs,
+    'csamResponseDelayMs',
+    0,
+    60000,
+    5000
+  );
   options.openaiModerationMaxTokens = parsePositiveIntInRange(
     options.openaiModerationMaxTokens,
     'openaiModerationMaxTokens',
@@ -205,6 +217,11 @@ function normalizeOptionalNumber(value) {
 
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : Number.NaN;
+}
+
+function normalizePlainObject(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return { ...value };
 }
 
 function normalizePriorityUsernames(value) {
